@@ -663,6 +663,64 @@ fn apply_bidding_strategy_update(
     }
 }
 
+/// Switch a campaign to Maximize Clicks (TARGET_SPEND) and set its max CPC bid
+/// limit (`targetSpend.cpcBidCeilingMicros`). `max_cpc` = None removes the limit.
+///
+/// Returns a ChangePlan preview that must be confirmed via `confirm_and_apply`.
+pub fn set_max_clicks_bidding(
+    config: &Config,
+    customer_id: &str,
+    campaign_id: &str,
+    max_cpc: Option<f64>,
+) -> Result<serde_json::Value> {
+    check_blocked_operation("set_max_clicks_bidding", &config.safety)?;
+    if campaign_id.trim().is_empty() || !campaign_id.chars().all(|c| c.is_ascii_digit()) {
+        return Err(crate::error::McpGoogleAdsError::Validation(format!(
+            "Invalid campaign_id '{}': must be numeric",
+            campaign_id
+        )));
+    }
+    if let Some(v) = max_cpc {
+        if v.is_nan() || v <= 0.0 || v > 100.0 {
+            return Err(crate::error::McpGoogleAdsError::Validation(format!(
+                "max_cpc must be > 0 and <= 100 (got {})",
+                v
+            )));
+        }
+    }
+
+    let cid = GoogleAdsClient::normalize_customer_id(customer_id);
+    let ceiling_micros = max_cpc.map(|v| (v * 1_000_000.0).round() as i64).unwrap_or(0);
+    let operation = json!({
+        "campaignOperation": {
+            "update": {
+                "resourceName": format!("customers/{}/campaigns/{}", cid, campaign_id),
+                "targetSpend": { "cpcBidCeilingMicros": ceiling_micros.to_string() }
+            },
+            "updateMask": "targetSpend.cpcBidCeilingMicros"
+        }
+    });
+
+    let changes = json!({
+        "campaign_id": campaign_id,
+        "bidding_strategy": "MAXIMIZE_CLICKS (TARGET_SPEND)",
+        "max_cpc_bid_limit": max_cpc,
+    });
+
+    let plan = ChangePlan::new(
+        "set_max_clicks_bidding".to_string(),
+        "campaign".to_string(),
+        campaign_id.to_string(),
+        cid,
+        changes,
+        false,
+        vec![operation],
+    );
+    let preview = plan.to_preview();
+    store_plan(plan);
+    Ok(preview)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1269,5 +1327,24 @@ mod tests {
         })
         .expect_err("invalid final_url rejected");
         assert!(err.to_string().contains("http(s) URL"));
+    }
+
+    #[test]
+    fn test_set_max_clicks_bidding_ceiling() {
+        let config = Config::default();
+        let preview = set_max_clicks_bidding(&config, "123-456-7890", "42", Some(0.6)).unwrap();
+        let plan = crate::safety::preview::get_plan(preview["plan_id"].as_str().unwrap()).unwrap();
+        let op = &plan.mutate_operations[0]["campaignOperation"];
+        assert_eq!(op["updateMask"], "targetSpend.cpcBidCeilingMicros");
+        assert_eq!(op["update"]["targetSpend"]["cpcBidCeilingMicros"], "600000");
+        assert_eq!(op["update"]["resourceName"], "customers/1234567890/campaigns/42");
+    }
+
+    #[test]
+    fn test_set_max_clicks_bidding_rejects_bad_input() {
+        let config = Config::default();
+        assert!(set_max_clicks_bidding(&config, "1", "abc", Some(0.6)).is_err());
+        assert!(set_max_clicks_bidding(&config, "1", "42", Some(0.0)).is_err());
+        assert!(set_max_clicks_bidding(&config, "1", "42", None).is_ok());
     }
 }

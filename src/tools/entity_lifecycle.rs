@@ -5,7 +5,7 @@ use crate::error::{McpGoogleAdsError, Result};
 use crate::safety::guards::check_blocked_operation;
 use crate::safety::preview::{store_plan, ChangePlan};
 
-const VALID_ENTITY_TYPES: &[&str] = &["campaign", "ad_group", "ad", "keyword"];
+const VALID_ENTITY_TYPES: &[&str] = &["campaign", "ad_group", "ad", "keyword", "asset_group"];
 
 /// Build the resource name and operation key for a given entity type.
 fn entity_resource_and_op(
@@ -29,6 +29,11 @@ fn entity_resource_and_op(
         "keyword" => (
             format!("customers/{}/adGroupCriteria/{}", cid, entity_id),
             "adGroupCriterionOperation".to_string(),
+        ),
+        // Performance Max asset group (pause / enable / remove).
+        "asset_group" => (
+            format!("customers/{}/assetGroups/{}", cid, entity_id),
+            "assetGroupOperation".to_string(),
         ),
         _ => {
             return Err(McpGoogleAdsError::Validation(format!(

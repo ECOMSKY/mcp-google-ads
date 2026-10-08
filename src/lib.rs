@@ -446,7 +446,7 @@ pub struct SetConversionActionPrimaryToolParams {
 pub struct EntityActionParams {
     /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
     pub customer_id: Option<String>,
-    /// Entity type: campaign, ad_group, ad, or keyword.
+    /// Entity type: campaign, ad_group, ad, keyword, or asset_group (Performance Max).
     pub entity_type: String,
     /// The entity ID.
     pub entity_id: String,
@@ -661,6 +661,75 @@ pub struct LinkAssetToAssetGroupToolParams {
     /// LOGO, LANDSCAPE_LOGO, YOUTUBE_VIDEO, HEADLINE, DESCRIPTION, LONG_HEADLINE,
     /// BUSINESS_NAME, CALL_TO_ACTION_SELECTION.
     pub field_type: String,
+}
+
+/// An existing asset to link to a new asset group.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ExistingAssetLinkParam {
+    /// Numeric asset ID (asset.id), e.g. an image already used by another asset group.
+    pub asset_id: String,
+    /// Field type: MARKETING_IMAGE, SQUARE_MARKETING_IMAGE, PORTRAIT_MARKETING_IMAGE,
+    /// LOGO, LANDSCAPE_LOGO, YOUTUBE_VIDEO, BUSINESS_NAME, CALL_TO_ACTION_SELECTION,
+    /// HEADLINE, LONG_HEADLINE, DESCRIPTION.
+    pub field_type: String,
+}
+
+/// Parameters for creating an asset group in an existing Performance Max campaign.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateAssetGroupToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// ID of the existing Performance Max campaign.
+    pub campaign_id: String,
+    /// Name of the new asset group.
+    pub asset_group_name: String,
+    /// Final URLs of the asset group.
+    pub final_urls: Vec<String>,
+    /// New headlines (max 30 chars each), created inline. Google rejects inline HEADLINE
+    /// assets on asset-group create: prefer create_text_assets + existing_assets (HEADLINE).
+    /// Total (new + linked) must be 3-15.
+    pub headlines: Vec<String>,
+    /// Long headlines (max 90 chars each), created inline. Total (new + linked) 1-5.
+    pub long_headlines: Vec<String>,
+    /// New descriptions (max 90 chars each), created inline. Same caveat as headlines:
+    /// prefer create_text_assets + existing_assets (DESCRIPTION). Total (new + linked) 2-5.
+    pub descriptions: Vec<String>,
+    /// Optional business name (max 25 chars) created as a new text asset. Omit when
+    /// the business name is campaign-level or reused through existing_assets.
+    pub business_name: Option<String>,
+    /// Existing assets (images, logos, videos, business name…) to link, typically
+    /// copied from a sibling asset group of the same campaign.
+    pub existing_assets: Option<Vec<ExistingAssetLinkParam>>,
+    /// Search themes (max 50, max 80 chars each).
+    pub search_themes: Option<Vec<String>>,
+    /// Audience IDs (numeric id or customers/{cid}/audiences/{id}).
+    pub audience_ids: Option<Vec<String>>,
+    /// ENABLED or PAUSED (default ENABLED; the campaign status still governs delivery).
+    pub status: Option<String>,
+}
+
+/// Parameters for creating several text assets at once.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateTextAssetsToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Texts to create as TEXT assets (1-100, max 90 chars each).
+    pub texts: Vec<String>,
+}
+
+/// Parameters for switching a campaign to Maximize Clicks with a max CPC limit.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetMaxClicksBiddingToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// The campaign ID.
+    pub campaign_id: String,
+    /// Max CPC bid limit in account currency (e.g. 0.6). Omit to remove the limit.
+    pub max_cpc: Option<f64>,
 }
 
 /// Parameters for adding signals to a Performance Max asset group.
@@ -1698,7 +1767,7 @@ impl GoogleAdsMcp {
         }
     }
 
-    #[tool(description = "Draft pausing a campaign, ad group, ad, or keyword.")]
+    #[tool(description = "Draft pausing a campaign, ad group, ad, keyword, or Performance Max asset group (entity_type=asset_group).")]
     async fn pause_entity(&self, Parameters(params): Parameters<EntityActionParams>) -> String {
         if let Some(err) = self.check_write_allowed() {
             return err;
@@ -1720,7 +1789,7 @@ impl GoogleAdsMcp {
         }
     }
 
-    #[tool(description = "Draft enabling a paused campaign, ad group, ad, or keyword.")]
+    #[tool(description = "Draft enabling a paused campaign, ad group, ad, keyword, or Performance Max asset group (entity_type=asset_group).")]
     async fn enable_entity(&self, Parameters(params): Parameters<EntityActionParams>) -> String {
         if let Some(err) = self.check_write_allowed() {
             return err;
@@ -1976,6 +2045,104 @@ impl GoogleAdsMcp {
         ) {
             Ok(preview) => preview.to_string(),
             Err(e) => serde_json::json!({"error": e.to_string()}).to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Add a NEW asset group to an EXISTING Performance Max campaign in one atomic \
+                       mutate: text assets (headlines, long headlines, descriptions), links to \
+                       existing assets (images, logos, videos — e.g. copied from a sibling asset \
+                       group), search themes and audience signals. Returns a preview — call \
+                       confirm_and_apply to execute."
+    )]
+    async fn create_asset_group(
+        &self,
+        Parameters(params): Parameters<CreateAssetGroupToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(params.customer_id.as_deref());
+        let config = self.config.clone();
+        let status = match params.status.as_deref().unwrap_or("ENABLED") {
+            "ENABLED" => models::AdStatus::Enabled,
+            "PAUSED" => models::AdStatus::Paused,
+            other => {
+                return serde_json::json!({"error": format!("Invalid status '{}': use ENABLED or PAUSED", other)})
+                    .to_string()
+            }
+        };
+        let existing_assets = params
+            .existing_assets
+            .unwrap_or_default()
+            .into_iter()
+            .map(|l| tools::pmax::ExistingAssetLink {
+                asset_id: l.asset_id,
+                field_type: l.field_type,
+            })
+            .collect();
+
+        match tools::pmax::create_asset_group(&tools::pmax::CreateAssetGroupParams {
+            config: &config,
+            customer_id: &cid,
+            campaign_id: &params.campaign_id,
+            asset_group_name: &params.asset_group_name,
+            final_urls: params.final_urls,
+            headlines: params.headlines,
+            long_headlines: params.long_headlines,
+            descriptions: params.descriptions,
+            business_name: params.business_name.as_deref(),
+            existing_assets,
+            search_themes: params.search_themes.unwrap_or_default(),
+            audience_ids: params.audience_ids.unwrap_or_default(),
+            status,
+        }) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Create several reusable TEXT assets in one atomic mutate. Performance Max \
+                       requires HEADLINE/DESCRIPTION assets to exist before create_asset_group: \
+                       create them here, then pass the returned asset IDs in \
+                       create_asset_group.existing_assets. Returns a preview — call confirm_and_apply."
+    )]
+    async fn create_text_assets(
+        &self,
+        Parameters(params): Parameters<CreateTextAssetsToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(params.customer_id.as_deref());
+        match tools::pmax::create_text_assets(&self.config, &cid, &params.texts) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Switch a campaign to Maximize Clicks (TARGET_SPEND) and set its max CPC bid \
+                       limit. Omit max_cpc to remove the limit. Returns a preview — call \
+                       confirm_and_apply to execute."
+    )]
+    async fn set_max_clicks_bidding(
+        &self,
+        Parameters(params): Parameters<SetMaxClicksBiddingToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(params.customer_id.as_deref());
+        match tools::campaigns_write::set_max_clicks_bidding(
+            &self.config,
+            &cid,
+            &params.campaign_id,
+            params.max_cpc,
+        ) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
         }
     }
 

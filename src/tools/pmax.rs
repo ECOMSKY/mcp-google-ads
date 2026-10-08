@@ -335,6 +335,333 @@ pub fn create_pmax_campaign(params: &CreatePmaxCampaignParams) -> Result<serde_j
     Ok(preview)
 }
 
+/// Field types an existing asset may be linked with when creating an asset group.
+const LINKABLE_FIELD_TYPES: &[&str] = &[
+    "MARKETING_IMAGE",
+    "SQUARE_MARKETING_IMAGE",
+    "PORTRAIT_MARKETING_IMAGE",
+    "LOGO",
+    "LANDSCAPE_LOGO",
+    "YOUTUBE_VIDEO",
+    "BUSINESS_NAME",
+    "CALL_TO_ACTION_SELECTION",
+    "HEADLINE",
+    "LONG_HEADLINE",
+    "DESCRIPTION",
+];
+
+/// Max length of a PMax search theme (same limit as `add_asset_group_signal`).
+const MAX_ASSET_GROUP_SEARCH_THEME_LEN: usize = 80;
+
+/// An existing asset (image, logo, video, business name…) to link to the new asset group.
+#[derive(Debug, Clone)]
+pub struct ExistingAssetLink {
+    pub asset_id: String,
+    pub field_type: String,
+}
+
+/// Parameters for adding a new asset group to an EXISTING Performance Max campaign.
+pub struct CreateAssetGroupParams<'a> {
+    pub config: &'a Config,
+    pub customer_id: &'a str,
+    pub campaign_id: &'a str,
+    pub asset_group_name: &'a str,
+    pub final_urls: Vec<String>,
+    pub headlines: Vec<String>,
+    pub long_headlines: Vec<String>,
+    pub descriptions: Vec<String>,
+    /// Optional business name text asset. Omit when the business name is set at
+    /// campaign level (brand guidelines) or reused via `existing_assets`.
+    pub business_name: Option<&'a str>,
+    /// Existing assets to link (typically the images / logos / videos of a
+    /// sibling asset group in the same campaign).
+    pub existing_assets: Vec<ExistingAssetLink>,
+    pub search_themes: Vec<String>,
+    /// Audience IDs (numeric part of customers/{cid}/audiences/{id}).
+    pub audience_ids: Vec<String>,
+    pub status: AdStatus,
+}
+
+/// Create a new asset group inside an existing Performance Max campaign, as ONE
+/// atomic mutate: the asset group (temp ID -1), its new text assets, links to
+/// existing assets (images, logos, videos…) and its signals (search themes and
+/// audiences). Google requires the minimum asset set to be present in the same
+/// request as the asset group create, which is why everything travels together.
+///
+/// Returns a ChangePlan preview that must be confirmed via `confirm_and_apply`.
+pub fn create_asset_group(params: &CreateAssetGroupParams) -> Result<serde_json::Value> {
+    check_blocked_operation("create_asset_group", &params.config.safety)?;
+
+    if params.campaign_id.trim().is_empty() {
+        return Err(McpGoogleAdsError::Validation(
+            "campaign_id is required".to_string(),
+        ));
+    }
+    if params.asset_group_name.trim().is_empty() {
+        return Err(McpGoogleAdsError::Validation(
+            "asset_group_name is required".to_string(),
+        ));
+    }
+    if params.final_urls.is_empty() {
+        return Err(McpGoogleAdsError::Validation(
+            "At least one final URL is required".to_string(),
+        ));
+    }
+    // Counts include existing assets linked with the same field type: Google requires
+    // HEADLINE and DESCRIPTION assets to exist BEFORE the asset-group mutate (create
+    // them with `create_text_assets`, then pass their IDs in `existing_assets`).
+    let linked = |ft: &str| params.existing_assets.iter().filter(|l| l.field_type == ft).count();
+    let n_headlines = params.headlines.len() + linked("HEADLINE");
+    let n_long = params.long_headlines.len() + linked("LONG_HEADLINE");
+    let n_desc = params.descriptions.len() + linked("DESCRIPTION");
+    if !(3..=15).contains(&n_headlines) {
+        return Err(McpGoogleAdsError::Validation(format!(
+            "PMax requires 3-15 headlines (new + linked), got {}",
+            n_headlines
+        )));
+    }
+    if !(1..=5).contains(&n_long) {
+        return Err(McpGoogleAdsError::Validation(format!(
+            "PMax requires 1-5 long headlines (new + linked), got {}",
+            n_long
+        )));
+    }
+    if !(2..=5).contains(&n_desc) {
+        return Err(McpGoogleAdsError::Validation(format!(
+            "PMax requires 2-5 descriptions (new + linked), got {}",
+            n_desc
+        )));
+    }
+    for h in &params.headlines {
+        validate_headline(h)?;
+    }
+    for lh in &params.long_headlines {
+        validate_description(lh)?;
+    }
+    for d in &params.descriptions {
+        validate_description(d)?;
+    }
+    if let Some(name) = params.business_name {
+        if name.chars().count() > 25 {
+            return Err(McpGoogleAdsError::Validation(format!(
+                "Business name exceeds 25 character limit ({} chars)",
+                name.chars().count()
+            )));
+        }
+    }
+    for link in &params.existing_assets {
+        if link.asset_id.trim().is_empty() || !link.asset_id.chars().all(|c| c.is_ascii_digit()) {
+            return Err(McpGoogleAdsError::Validation(format!(
+                "Invalid existing asset id '{}': must be numeric",
+                link.asset_id
+            )));
+        }
+        if !LINKABLE_FIELD_TYPES.contains(&link.field_type.as_str()) {
+            return Err(McpGoogleAdsError::Validation(format!(
+                "Invalid field_type '{}'. Must be one of: {}",
+                link.field_type,
+                LINKABLE_FIELD_TYPES.join(", ")
+            )));
+        }
+    }
+    if params.search_themes.len() > 50 {
+        return Err(McpGoogleAdsError::Validation(format!(
+            "An asset group accepts at most 50 search themes, got {}",
+            params.search_themes.len()
+        )));
+    }
+    for theme in &params.search_themes {
+        if theme.trim().is_empty() {
+            return Err(McpGoogleAdsError::Validation(
+                "Search theme cannot be empty".to_string(),
+            ));
+        }
+        if theme.chars().count() > MAX_ASSET_GROUP_SEARCH_THEME_LEN {
+            return Err(McpGoogleAdsError::Validation(format!(
+                "Search theme '{}' is {} chars, exceeds the {} char limit",
+                theme,
+                theme.chars().count(),
+                MAX_ASSET_GROUP_SEARCH_THEME_LEN
+            )));
+        }
+    }
+
+    let cid = crate::client::GoogleAdsClient::normalize_customer_id(params.customer_id);
+    let campaign_resource = format!("customers/{}/campaigns/{}", cid, params.campaign_id);
+    let asset_group_resource = format!("customers/{}/assetGroups/-1", cid);
+    let mut operations: Vec<serde_json::Value> = Vec::new();
+
+    // 1. Asset group
+    operations.push(json!({
+        "assetGroupOperation": {
+            "create": {
+                "resourceName": asset_group_resource,
+                "name": params.asset_group_name,
+                "campaign": campaign_resource,
+                "finalUrls": params.final_urls,
+                "status": params.status.as_api_str()
+            }
+        }
+    }));
+
+    // 2. New text assets + links
+    let mut temp_asset_id: i64 = -100;
+    let mut push_text = |ops: &mut Vec<serde_json::Value>, text: &str, field_type: &str| {
+        let asset_resource = format!("customers/{}/assets/{}", cid, temp_asset_id);
+        ops.push(json!({
+            "assetOperation": {
+                "create": {
+                    "resourceName": asset_resource,
+                    "textAsset": { "text": text }
+                }
+            }
+        }));
+        ops.push(json!({
+            "assetGroupAssetOperation": {
+                "create": {
+                    "assetGroup": asset_group_resource,
+                    "asset": asset_resource,
+                    "fieldType": field_type
+                }
+            }
+        }));
+        temp_asset_id -= 1;
+    };
+    for h in &params.headlines {
+        push_text(&mut operations, h, "HEADLINE");
+    }
+    for lh in &params.long_headlines {
+        push_text(&mut operations, lh, "LONG_HEADLINE");
+    }
+    for d in &params.descriptions {
+        push_text(&mut operations, d, "DESCRIPTION");
+    }
+    if let Some(name) = params.business_name {
+        push_text(&mut operations, name, "BUSINESS_NAME");
+    }
+
+    // 3. Links to existing assets (images, logos, videos…)
+    for link in &params.existing_assets {
+        operations.push(json!({
+            "assetGroupAssetOperation": {
+                "create": {
+                    "assetGroup": asset_group_resource,
+                    "asset": format!("customers/{}/assets/{}", cid, link.asset_id),
+                    "fieldType": link.field_type
+                }
+            }
+        }));
+    }
+
+    // 4. Signals
+    for theme in &params.search_themes {
+        operations.push(json!({
+            "assetGroupSignalOperation": {
+                "create": {
+                    "assetGroup": asset_group_resource,
+                    "searchTheme": { "text": theme }
+                }
+            }
+        }));
+    }
+    for audience_id in &params.audience_ids {
+        let audience_resource = if audience_id.starts_with("customers/") {
+            audience_id.clone()
+        } else {
+            format!("customers/{}/audiences/{}", cid, audience_id)
+        };
+        operations.push(json!({
+            "assetGroupSignalOperation": {
+                "create": {
+                    "assetGroup": asset_group_resource,
+                    "audience": { "audience": audience_resource }
+                }
+            }
+        }));
+    }
+
+    let changes = json!({
+        "campaign_id": params.campaign_id,
+        "asset_group_name": params.asset_group_name,
+        "final_urls": params.final_urls,
+        "status": params.status.as_api_str(),
+        "headlines": params.headlines,
+        "long_headlines": params.long_headlines,
+        "descriptions": params.descriptions,
+        "business_name": params.business_name,
+        "existing_assets_linked": params.existing_assets.iter()
+            .map(|l| json!({"asset_id": l.asset_id, "field_type": l.field_type}))
+            .collect::<Vec<_>>(),
+        "search_themes_count": params.search_themes.len(),
+        "audience_ids": params.audience_ids,
+    });
+
+    let plan = ChangePlan::new(
+        "create_asset_group".to_string(),
+        "asset_group".to_string(),
+        "new".to_string(),
+        cid,
+        changes,
+        false,
+        operations,
+    )
+    .with_status_after_apply(params.status);
+
+    let preview = plan.to_preview();
+    store_plan(plan);
+    Ok(preview)
+}
+
+
+/// Create several reusable TEXT assets in one atomic mutate (no links).
+///
+/// Performance Max requires HEADLINE and DESCRIPTION assets to exist before the
+/// asset group that uses them is created; create them here, read the asset IDs
+/// from the apply response, then link them via `create_asset_group.existing_assets`.
+pub fn create_text_assets(
+    config: &Config,
+    customer_id: &str,
+    texts: &[String],
+) -> Result<serde_json::Value> {
+    check_blocked_operation("create_text_assets", &config.safety)?;
+    if texts.is_empty() || texts.len() > 100 {
+        return Err(McpGoogleAdsError::Validation(format!(
+            "Provide 1-100 texts, got {}",
+            texts.len()
+        )));
+    }
+    for t in texts {
+        if t.trim().is_empty() {
+            return Err(McpGoogleAdsError::Validation("Text cannot be empty".to_string()));
+        }
+        if t.chars().count() > 90 {
+            return Err(McpGoogleAdsError::Validation(format!(
+                "Text '{}' exceeds 90 characters",
+                t
+            )));
+        }
+    }
+    let cid = crate::client::GoogleAdsClient::normalize_customer_id(customer_id);
+    let operations: Vec<serde_json::Value> = texts
+        .iter()
+        .map(|t| json!({"assetOperation": {"create": {"textAsset": {"text": t}}}}))
+        .collect();
+    let plan = ChangePlan::new(
+        "create_text_assets".to_string(),
+        "asset".to_string(),
+        "new".to_string(),
+        cid,
+        json!({"texts": texts, "count": texts.len(),
+               "note": "Asset resource names are returned in the apply response, in the same order as texts"}),
+        false,
+        operations,
+    );
+    let preview = plan.to_preview();
+    store_plan(plan);
+    Ok(preview)
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -507,5 +834,109 @@ mod tests {
             campaign_create["containsEuPoliticalAdvertising"],
             json!("DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING")
         );
+    }
+
+    // ── create_asset_group ───────────────────────────────────────────
+
+    fn ag_params(config: &Config) -> CreateAssetGroupParams<'_> {
+        CreateAssetGroupParams {
+            config,
+            customer_id: "123-456-7890",
+            campaign_id: "111",
+            asset_group_name: "Friends",
+            final_urls: vec!["https://example.com".to_string()],
+            headlines: vec!["H1".into(), "H2".into(), "H3".into()],
+            long_headlines: vec!["Long headline".into()],
+            descriptions: vec!["D1".into(), "D2".into()],
+            business_name: None,
+            existing_assets: vec![ExistingAssetLink {
+                asset_id: "555".into(),
+                field_type: "MARKETING_IMAGE".into(),
+            }],
+            search_themes: vec!["escape room brussels".into()],
+            audience_ids: vec!["319003115".into()],
+            status: AdStatus::Enabled,
+        }
+    }
+
+    #[test]
+    fn test_create_asset_group_ops() {
+        let config = Config::default();
+        let preview = create_asset_group(&ag_params(&config)).unwrap();
+        assert_eq!(preview["operation"], "create_asset_group");
+        let plan = crate::safety::preview::get_plan(preview["plan_id"].as_str().unwrap()).unwrap();
+        let ops = &plan.mutate_operations;
+        let ag = ops[0].pointer("/assetGroupOperation/create").expect("asset group first");
+        assert_eq!(ag["campaign"], "customers/1234567890/campaigns/111");
+        assert_eq!(ag["resourceName"], "customers/1234567890/assetGroups/-1");
+        assert_eq!(ag["status"], "ENABLED");
+        // 6 text assets created + linked = 12 ops, 1 image link, 1 theme, 1 audience
+        assert_eq!(ops.len(), 1 + 12 + 1 + 1 + 1);
+        assert!(ops.iter().any(|o| o.pointer("/assetGroupAssetOperation/create/asset")
+            == Some(&json!("customers/1234567890/assets/555"))));
+        assert!(ops.iter().any(|o| o.pointer("/assetGroupSignalOperation/create/audience/audience")
+            == Some(&json!("customers/1234567890/audiences/319003115"))));
+        assert!(ops.iter().any(|o| o.pointer("/assetGroupSignalOperation/create/searchTheme/text")
+            == Some(&json!("escape room brussels"))));
+    }
+
+    #[test]
+    fn test_create_asset_group_rejects_bad_field_type() {
+        let config = Config::default();
+        let mut p = ag_params(&config);
+        p.existing_assets[0].field_type = "NOPE".into();
+        assert!(create_asset_group(&p).is_err());
+    }
+
+    #[test]
+    fn test_create_asset_group_rejects_51_themes() {
+        let config = Config::default();
+        let mut p = ag_params(&config);
+        p.search_themes = (0..51).map(|i| format!("t{}", i)).collect();
+        assert!(create_asset_group(&p).is_err());
+    }
+
+    #[test]
+    fn test_create_asset_group_headline_unicode_len() {
+        let config = Config::default();
+        let mut p = ag_params(&config);
+        // 29 chars incl. accents and a curly apostrophe: must pass (char count, not bytes)
+        p.headlines[0] = "Essayez quelque chose d’autre".into();
+        assert!(create_asset_group(&p).is_ok());
+    }
+
+    #[test]
+    fn test_create_asset_group_blocked() {
+        let mut config = Config::default();
+        config.safety.blocked_operations = vec!["create_asset_group".to_string()];
+        assert!(create_asset_group(&ag_params(&config)).is_err());
+    }
+
+    #[test]
+    fn test_create_asset_group_counts_linked_text_assets() {
+        let config = Config::default();
+        let mut p = ag_params(&config);
+        p.headlines = vec![];
+        p.descriptions = vec![];
+        for id in ["1", "2", "3"] {
+            p.existing_assets.push(ExistingAssetLink { asset_id: id.into(), field_type: "HEADLINE".into() });
+        }
+        for id in ["4", "5"] {
+            p.existing_assets.push(ExistingAssetLink { asset_id: id.into(), field_type: "DESCRIPTION".into() });
+        }
+        assert!(create_asset_group(&p).is_ok());
+        p.existing_assets.retain(|l| l.field_type != "DESCRIPTION");
+        assert!(create_asset_group(&p).is_err());
+    }
+
+    #[test]
+    fn test_create_text_assets() {
+        let config = Config::default();
+        let preview = create_text_assets(&config, "123-456-7890", &["A".into(), "B".into()]).unwrap();
+        let plan = crate::safety::preview::get_plan(preview["plan_id"].as_str().unwrap()).unwrap();
+        assert_eq!(plan.mutate_operations.len(), 2);
+        assert_eq!(plan.mutate_operations[1]["assetOperation"]["create"]["textAsset"]["text"], "B");
+        assert!(create_text_assets(&config, "1", &[]).is_err());
+        assert!(create_text_assets(&config, "1", &["x".repeat(91)]).is_err());
     }
 }
