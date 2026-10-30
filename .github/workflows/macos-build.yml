@@ -1,0 +1,50 @@
+name: macos-build
+
+# Builds the Apple Silicon binary on every push to main that touches the code,
+# and publishes it on the rolling "macos-latest-build" release so a Mac can
+# fetch it with a plain download (no Rust toolchain needed locally).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/macos-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - name: Build release binary
+        run: cargo build --release --target aarch64-apple-darwin
+      - name: Package
+        run: |
+          cp target/aarch64-apple-darwin/release/mcp-google-ads mcp-google-ads-aarch64-apple-darwin
+          shasum -a 256 mcp-google-ads-aarch64-apple-darwin > mcp-google-ads-aarch64-apple-darwin.sha256
+          echo "${GITHUB_SHA}" > mcp-google-ads-aarch64-apple-darwin.commit
+      - name: Publish to rolling release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view macos-latest-build >/dev/null 2>&1; then
+            gh release create macos-latest-build --title "macOS latest build" \
+              --notes "Rolling Apple Silicon build of main." --prerelease --target "${GITHUB_SHA}"
+          fi
+          gh release upload macos-latest-build \
+            mcp-google-ads-aarch64-apple-darwin \
+            mcp-google-ads-aarch64-apple-darwin.sha256 \
+            mcp-google-ads-aarch64-apple-darwin.commit --clobber
