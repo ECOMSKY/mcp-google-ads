@@ -720,6 +720,353 @@ pub struct CreateTextAssetsToolParams {
     pub texts: Vec<String>,
 }
 
+// ── Demand Gen ──────────────────────────────────────────────────────────
+
+/// Parameters for creating a Demand Gen campaign.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateDemandGenCampaignToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Campaign name.
+    pub campaign_name: String,
+    /// Daily budget in account currency.
+    pub daily_budget: f64,
+    /// MAXIMIZE_CLICKS, MAXIMIZE_CONVERSIONS, TARGET_CPA, MAXIMIZE_CONVERSION_VALUE or TARGET_ROAS.
+    pub bidding_strategy: String,
+    /// Target CPA in account currency (TARGET_CPA, optional for MAXIMIZE_CONVERSIONS).
+    pub target_cpa: Option<f64>,
+    /// Target ROAS ratio (e.g. 3.0), optional for MAXIMIZE_CONVERSION_VALUE.
+    pub target_roas: Option<f64>,
+    /// Not supported by Google on Demand Gen: leave empty (the tool refuses it).
+    pub max_cpc: Option<f64>,
+    /// Start paused (default true).
+    pub start_paused: Option<bool>,
+}
+
+/// Parameters for creating a Demand Gen ad group.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateDemandGenAdGroupToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Demand Gen campaign ID.
+    pub campaign_id: String,
+    /// Ad group name.
+    pub ad_group_name: String,
+    /// Channels to serve on. Any of: youtube_in_stream, youtube_in_feed, youtube_shorts,
+    /// discover, gmail, display, maps. Everything not listed is turned OFF.
+    pub channels: Vec<String>,
+    /// Optimized targeting (lets Google expand beyond your audiences). Default false.
+    pub optimized_targeting: Option<bool>,
+    /// Geo target constant IDs (e.g. ["2840"] for US). Required.
+    pub geo_target_ids: Vec<String>,
+    /// Language constant IDs (e.g. ["1000"] for English).
+    pub language_ids: Option<Vec<String>>,
+    /// Audience IDs (from create_demand_gen_audience) to target.
+    pub audience_ids: Option<Vec<String>>,
+    /// Start paused (default false: the campaign status already gates delivery).
+    pub start_paused: Option<bool>,
+}
+
+/// Parameters for creating a custom segment.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateCustomAudienceToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Segment name (unique in the account).
+    pub name: String,
+    /// Optional description.
+    pub description: Option<String>,
+    /// SEARCH (people who searched these terms on Google; keywords only) or AUTO (keywords and/or URLs).
+    pub audience_type: String,
+    /// Keywords / search terms (max 80 chars each).
+    pub keywords: Option<Vec<String>>,
+    /// Websites people browse (e.g. "optmyzr.com"). AUTO only.
+    pub urls: Option<Vec<String>>,
+}
+
+/// An age range to keep in an audience.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AgeRangeParam {
+    /// 18, 25, 35, 45, 55 or 65.
+    pub min_age: i32,
+    /// 24, 34, 44, 54 or 64. Omit for open-ended (e.g. 65+).
+    pub max_age: Option<i32>,
+}
+
+/// Parameters for creating a Demand Gen audience.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateDemandGenAudienceToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Audience name (unique in the account).
+    pub name: String,
+    /// Custom segment IDs (from create_custom_audience).
+    pub custom_audience_ids: Vec<String>,
+    /// Age ranges to keep. Omit for all ages.
+    pub age_ranges: Option<Vec<AgeRangeParam>>,
+    /// Keep users of unknown age (default true).
+    pub include_undetermined_age: Option<bool>,
+}
+
+/// Parameters for creating a Demand Gen video ad.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateDemandGenVideoAdToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Demand Gen ad group ID.
+    pub ad_group_id: String,
+    /// Internal ad name.
+    pub ad_name: String,
+    /// 1-5 YouTube video IDs or URLs (watch, shorts, youtu.be).
+    pub videos: Vec<String>,
+    /// Existing square (1:1) IMAGE asset ID for the logo (see upload_image_asset).
+    pub logo_asset_id: String,
+    /// Business name (max 25 chars).
+    pub business_name: String,
+    /// 1-5 headlines (max 40 chars).
+    pub headlines: Vec<String>,
+    /// 1-5 long headlines (max 90 chars).
+    pub long_headlines: Vec<String>,
+    /// 1-5 descriptions (max 90 chars).
+    pub descriptions: Vec<String>,
+    /// Landing page URL.
+    pub final_url: String,
+    /// Display path 1 (max 15 chars).
+    pub breadcrumb1: Option<String>,
+    /// Display path 2 (max 15 chars).
+    pub breadcrumb2: Option<String>,
+    /// Start paused (default false).
+    pub start_paused: Option<bool>,
+}
+
+// ── Advanced (PMax full, exclusions, settings, raw) ─────────────────────
+
+/// Parameters for a complete Performance Max campaign.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreatePmaxFullToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Campaign name.
+    pub campaign_name: String,
+    /// Daily budget in account currency.
+    pub daily_budget: f64,
+    /// MAXIMIZE_CONVERSIONS, TARGET_CPA, MAXIMIZE_CONVERSION_VALUE or TARGET_ROAS.
+    pub bidding_strategy: String,
+    /// Target CPA in account currency.
+    pub target_cpa: Option<f64>,
+    /// Target ROAS ratio (e.g. 3.0 = 300%).
+    pub target_roas: Option<f64>,
+    /// Geo target constant IDs (required).
+    pub geo_target_ids: Vec<String>,
+    /// Language constant IDs (e.g. ["1000"] English, ["1002"] French).
+    pub language_ids: Option<Vec<String>>,
+    /// Final URL(s) of the asset group.
+    pub final_urls: Vec<String>,
+    /// Asset group name (default "<campaign> Asset Group").
+    pub asset_group_name: Option<String>,
+    /// 3-15 headlines (30 chars). Fill all 15. Optional for retail (feed-only).
+    pub headlines: Option<Vec<String>>,
+    /// 1-5 long headlines (90 chars). Fill all 5.
+    pub long_headlines: Option<Vec<String>>,
+    /// 2-5 descriptions (90 chars, one <= 60). Fill all 5.
+    pub descriptions: Option<Vec<String>>,
+    /// Business name (25 chars). Required unless retail.
+    pub business_name: Option<String>,
+    /// Existing landscape 1.91:1 IMAGE asset IDs (up to 20).
+    pub marketing_image_asset_ids: Option<Vec<String>>,
+    /// Existing square 1:1 IMAGE asset IDs (up to 20).
+    pub square_marketing_image_asset_ids: Option<Vec<String>>,
+    /// Existing portrait 4:5 IMAGE asset IDs (up to 20).
+    pub portrait_marketing_image_asset_ids: Option<Vec<String>>,
+    /// Existing square logo IMAGE asset IDs (1-5).
+    pub logo_asset_ids: Option<Vec<String>>,
+    /// Existing landscape 4:1 logo IMAGE asset IDs.
+    pub landscape_logo_asset_ids: Option<Vec<String>>,
+    /// YouTube video IDs or URLs (up to 5). Without videos Google auto-generates some.
+    pub youtube_videos: Option<Vec<String>>,
+    /// Call to action: LEARN_MORE, SIGN_UP, SHOP_NOW, BUY_NOW, GET_QUOTE, ... Omit for automatic.
+    pub call_to_action: Option<String>,
+    /// Brand guidelines: business name + logos become campaign assets. Default false.
+    pub brand_guidelines: Option<bool>,
+    /// Final URL expansion. Default false (traffic stays on your final URLs).
+    pub final_url_expansion: Option<bool>,
+    /// Text customization (Google-written text). Omit for Google default.
+    pub text_asset_automation: Option<bool>,
+    /// Words Google's generated text must never use.
+    pub term_exclusions: Option<Vec<String>>,
+    /// Free-text restrictions for generated text (e.g. "Don't mention competitors").
+    pub messaging_restrictions: Option<Vec<String>>,
+    /// Search themes (max 25, 80 chars).
+    pub search_themes: Option<Vec<String>>,
+    /// Audience IDs used as audience signals.
+    pub audience_ids: Option<Vec<String>>,
+    /// Campaign negative keywords (phrase match).
+    pub negative_keywords: Option<Vec<String>>,
+    /// URL fragments excluded from landing pages.
+    pub url_exclusions: Option<Vec<String>>,
+    /// Merchant Center ID for retail PMax (adds an all-products listing group).
+    pub merchant_id: Option<i64>,
+    /// Merchant Center feed label (e.g. "US").
+    pub feed_label: Option<String>,
+    /// Start date YYYY-MM-DD.
+    pub start_date: Option<String>,
+    /// End date YYYY-MM-DD.
+    pub end_date: Option<String>,
+    /// Start paused (default true).
+    pub start_paused: Option<bool>,
+}
+
+/// One asset automation switch.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AssetAutomationParam {
+    /// e.g. FINAL_URL_EXPANSION_TEXT_ASSET_AUTOMATION, TEXT_ASSET_AUTOMATION, GENERATE_ENHANCED_YOUTUBE_VIDEOS, GENERATE_IMAGE_ENHANCEMENT, GENERATE_VERTICAL_YOUTUBE_VIDEOS, GENERATE_SHORTER_YOUTUBE_VIDEOS.
+    pub automation_type: String,
+    /// true = opted in, false = opted out.
+    pub enabled: bool,
+}
+
+/// Parameters for asset automation settings.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetAssetAutomationToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Campaign ID.
+    pub campaign_id: String,
+    /// Settings to apply.
+    pub settings: Vec<AssetAutomationParam>,
+}
+
+/// Parameters for campaign exclusions.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CampaignExclusionsToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Campaign ID.
+    pub campaign_id: String,
+    /// Website placements to exclude (e.g. "example.com").
+    pub placements: Option<Vec<String>>,
+    /// YouTube channel IDs (UC...) to exclude.
+    pub youtube_channels: Option<Vec<String>>,
+    /// YouTube video IDs or URLs to exclude.
+    pub youtube_videos: Option<Vec<String>>,
+    /// Content labels to exclude (Display/Video campaigns; Demand Gen and PMax refuse them, use account-level content suitability): JUVENILE, TRAGEDY, PROFANITY, SEXUALLY_SUGGESTIVE, LIVE_STREAMING_VIDEO, EMBEDDED_VIDEO, BELOW_THE_FOLD, PARKED_DOMAIN, SOCIAL_ISSUES, BRAND_SUITABILITY_*...
+    pub content_labels: Option<Vec<String>>,
+    /// URL fragments to exclude as landing pages (PMax / dynamic).
+    pub url_exclusions: Option<Vec<String>>,
+    /// Devices excluded with a -100% bid modifier: MOBILE, TABLET, DESKTOP, CONNECTED_TV.
+    pub exclude_devices: Option<Vec<String>>,
+    /// Topic constant IDs to exclude.
+    pub topic_ids: Option<Vec<String>>,
+}
+
+/// Parameters for campaign settings.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateCampaignSettingsToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Campaign ID.
+    pub campaign_id: String,
+    /// New campaign name.
+    pub name: Option<String>,
+    /// Final URL suffix, e.g. "utm_source=google&utm_medium=cpc&utm_campaign={campaignid}".
+    pub final_url_suffix: Option<String>,
+    /// Tracking URL template, e.g. "{lpurl}?src=gads".
+    pub tracking_url_template: Option<String>,
+    /// Start date YYYY-MM-DD.
+    pub start_date: Option<String>,
+    /// End date YYYY-MM-DD.
+    pub end_date: Option<String>,
+}
+
+/// Parameters for updating a Demand Gen ad group.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateDemandGenAdGroupToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Ad group ID.
+    pub ad_group_id: String,
+    /// New full channel list (youtube_in_stream, youtube_in_feed, youtube_shorts, discover, gmail, display, maps). Unlisted = off.
+    pub channels: Option<Vec<String>>,
+    /// Optimized targeting on/off.
+    pub optimized_targeting: Option<bool>,
+}
+
+/// Parameters for YouTube video assets.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateYoutubeVideoAssetsToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// YouTube video IDs or URLs (watch, shorts, youtu.be).
+    pub videos: Vec<String>,
+}
+
+/// Parameters for uploading an image from a URL.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UploadImageFromUrlToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Asset name.
+    pub asset_name: String,
+    /// Public https URL of a PNG, JPEG or GIF (max 5 MB).
+    pub image_url: String,
+}
+
+/// Parameters for raw mutate.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MutateRawToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// What these operations do, in plain words (shown in the preview and audit log).
+    pub description: String,
+    /// googleAds:mutate MutateOperation objects, REST/camelCase, e.g. {"campaignOperation": {"update": {...}, "updateMask": "..."}}. Temp ids (-1, -2...) allowed.
+    pub operations: Vec<serde_json::Value>,
+}
+
+/// Parameters for campaign brand assets.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AddCampaignBrandAssetsToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Campaign ID.
+    pub campaign_id: String,
+    /// Business name (25 chars).
+    pub business_name: Option<String>,
+    /// Existing square IMAGE asset IDs to use as business logo.
+    pub business_logo_asset_ids: Option<Vec<String>>,
+    /// Existing IMAGE asset IDs (1:1 and 1.91:1) to use as image extensions.
+    pub image_asset_ids: Option<Vec<String>>,
+    /// Call extension country code (e.g. "US").
+    pub call_country_code: Option<String>,
+    /// Call extension phone number.
+    pub call_phone_number: Option<String>,
+}
+
+/// Parameters for the Search completeness audit.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AuditSearchCompletenessToolParams {
+    /// Customer ID (e.g. 123-456-7890). Defaults to configured customer_id.
+    pub customer_id: Option<String>,
+    /// Search campaign ID.
+    pub campaign_id: String,
+}
+
 /// Parameters for switching a campaign to Maximize Clicks with a max CPC limit.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -1868,6 +2215,522 @@ impl GoogleAdsMcp {
             Ok(preview) => preview.to_string(),
             Err(e) => e.to_json().to_string(),
         }
+    }
+
+    // ── Demand Gen ──────────────────────────────────────────────────────
+
+    #[tool(
+        description = "Create a Demand Gen campaign (budget + campaign, PAUSED by default). \
+                       Then add ad groups with create_demand_gen_ad_group and ads with \
+                       create_demand_gen_video_ad. Returns a preview — call confirm_and_apply."
+    )]
+    async fn create_demand_gen_campaign(
+        &self,
+        Parameters(params): Parameters<CreateDemandGenCampaignToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(params.customer_id.as_deref());
+        match tools::demand_gen::create_demand_gen_campaign(
+            &tools::demand_gen::CreateDemandGenCampaignParams {
+                config: &self.config,
+                customer_id: &cid,
+                campaign_name: &params.campaign_name,
+                daily_budget: params.daily_budget,
+                bidding_strategy: &params.bidding_strategy,
+                target_cpa: params.target_cpa,
+                target_roas: params.target_roas,
+                max_cpc: params.max_cpc,
+                start_paused: params.start_paused.unwrap_or(true),
+            },
+        ) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Create a Demand Gen ad group with explicit channel controls (YouTube \
+                       in-stream / in-feed / Shorts, Discover, Gmail, Display, Maps), optimized \
+                       targeting (off by default), ad-group geo + language targeting and audience \
+                       targeting. Returns a preview — call confirm_and_apply."
+    )]
+    async fn create_demand_gen_ad_group(
+        &self,
+        Parameters(params): Parameters<CreateDemandGenAdGroupToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(params.customer_id.as_deref());
+        let mut channels = tools::demand_gen::DemandGenChannels::default();
+        for ch in &params.channels {
+            match ch.trim().to_ascii_lowercase().as_str() {
+                "youtube_in_stream" => channels.youtube_in_stream = true,
+                "youtube_in_feed" => channels.youtube_in_feed = true,
+                "youtube_shorts" => channels.youtube_shorts = true,
+                "discover" => channels.discover = true,
+                "gmail" => channels.gmail = true,
+                "display" => channels.display = true,
+                "maps" => channels.maps = true,
+                other => {
+                    return serde_json::json!({"error": format!("Unknown channel '{}'", other)})
+                        .to_string()
+                }
+            }
+        }
+        match tools::demand_gen::create_demand_gen_ad_group(
+            &tools::demand_gen::CreateDemandGenAdGroupParams {
+                config: &self.config,
+                customer_id: &cid,
+                campaign_id: &params.campaign_id,
+                ad_group_name: &params.ad_group_name,
+                channels,
+                optimized_targeting: params.optimized_targeting.unwrap_or(false),
+                geo_target_ids: params.geo_target_ids,
+                language_ids: params.language_ids.unwrap_or_default(),
+                audience_ids: params.audience_ids.unwrap_or_default(),
+                start_paused: params.start_paused.unwrap_or(false),
+            },
+        ) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Create a custom segment: SEARCH = people who searched these terms on \
+                       Google; AUTO = keywords and/or websites people browse. Use the returned \
+                       id in create_demand_gen_audience. Returns a preview — call confirm_and_apply."
+    )]
+    async fn create_custom_audience(
+        &self,
+        Parameters(params): Parameters<CreateCustomAudienceToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(params.customer_id.as_deref());
+        match tools::demand_gen::create_custom_audience(
+            &tools::demand_gen::CreateCustomAudienceParams {
+                config: &self.config,
+                customer_id: &cid,
+                name: &params.name,
+                description: params.description.as_deref(),
+                audience_type: &params.audience_type,
+                keywords: params.keywords.unwrap_or_default(),
+                urls: params.urls.unwrap_or_default(),
+            },
+        ) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Create an audience for Demand Gen from custom segments, optionally \
+                       restricted to age ranges. Target it with create_demand_gen_ad_group \
+                       (audience_ids). Returns a preview — call confirm_and_apply."
+    )]
+    async fn create_demand_gen_audience(
+        &self,
+        Parameters(params): Parameters<CreateDemandGenAudienceToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(params.customer_id.as_deref());
+        let age_ranges = params
+            .age_ranges
+            .unwrap_or_default()
+            .into_iter()
+            .map(|r| (r.min_age, r.max_age))
+            .collect();
+        match tools::demand_gen::create_demand_gen_audience(
+            &tools::demand_gen::CreateDemandGenAudienceParams {
+                config: &self.config,
+                customer_id: &cid,
+                name: &params.name,
+                custom_audience_ids: params.custom_audience_ids,
+                age_ranges,
+                include_undetermined_age: params.include_undetermined_age.unwrap_or(true),
+            },
+        ) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Create a Demand Gen video responsive ad from 1-5 YouTube videos (ids or \
+                       watch/shorts URLs), a square logo IMAGE asset, headlines, long headlines \
+                       and descriptions. Returns a preview — call confirm_and_apply."
+    )]
+    async fn create_demand_gen_video_ad(
+        &self,
+        Parameters(params): Parameters<CreateDemandGenVideoAdToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(params.customer_id.as_deref());
+        match tools::demand_gen::create_demand_gen_video_ad(
+            &tools::demand_gen::CreateDemandGenVideoAdParams {
+                config: &self.config,
+                customer_id: &cid,
+                ad_group_id: &params.ad_group_id,
+                ad_name: &params.ad_name,
+                videos: params.videos,
+                logo_asset_id: &params.logo_asset_id,
+                business_name: &params.business_name,
+                headlines: params.headlines,
+                long_headlines: params.long_headlines,
+                descriptions: params.descriptions,
+                final_url: &params.final_url,
+                breadcrumb1: params.breadcrumb1.as_deref(),
+                breadcrumb2: params.breadcrumb2.as_deref(),
+                start_paused: params.start_paused.unwrap_or(false),
+            },
+        ) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    // ── Advanced ────────────────────────────────────────────────────────
+
+    #[tool(
+        description = "Create a COMPLETE Performance Max campaign in one atomic batch: budget, \
+                       bidding, geo/language, asset group with all text assets, images, logos, \
+                       YouTube videos, business name, call to action, search themes, audience \
+                       signals, negative keywords, URL exclusions, final URL expansion and text \
+                       automation switches, brand guidelines, text guidelines, Merchant Center \
+                       (retail) and dates. Returns a preview — call confirm_and_apply."
+    )]
+    async fn create_pmax_campaign_full(
+        &self,
+        Parameters(p): Parameters<CreatePmaxFullToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(p.customer_id.as_deref());
+        let images = tools::advanced::PmaxImageAssets {
+            marketing: p.marketing_image_asset_ids.unwrap_or_default(),
+            square_marketing: p.square_marketing_image_asset_ids.unwrap_or_default(),
+            portrait_marketing: p.portrait_marketing_image_asset_ids.unwrap_or_default(),
+            logo: p.logo_asset_ids.unwrap_or_default(),
+            landscape_logo: p.landscape_logo_asset_ids.unwrap_or_default(),
+        };
+        match tools::advanced::create_pmax_campaign_full(&tools::advanced::CreatePmaxFullParams {
+            config: &self.config,
+            customer_id: &cid,
+            campaign_name: &p.campaign_name,
+            daily_budget: p.daily_budget,
+            bidding_strategy: &p.bidding_strategy,
+            target_cpa: p.target_cpa,
+            target_roas: p.target_roas,
+            geo_target_ids: p.geo_target_ids,
+            language_ids: p.language_ids.unwrap_or_default(),
+            final_urls: p.final_urls,
+            asset_group_name: p.asset_group_name.as_deref(),
+            headlines: p.headlines.unwrap_or_default(),
+            long_headlines: p.long_headlines.unwrap_or_default(),
+            descriptions: p.descriptions.unwrap_or_default(),
+            business_name: p.business_name.as_deref(),
+            images,
+            youtube_videos: p.youtube_videos.unwrap_or_default(),
+            call_to_action: p.call_to_action.as_deref(),
+            brand_guidelines: p.brand_guidelines.unwrap_or(false),
+            final_url_expansion: Some(p.final_url_expansion.unwrap_or(false)),
+            text_asset_automation: p.text_asset_automation,
+            term_exclusions: p.term_exclusions.unwrap_or_default(),
+            messaging_restrictions: p.messaging_restrictions.unwrap_or_default(),
+            search_themes: p.search_themes.unwrap_or_default(),
+            audience_ids: p.audience_ids.unwrap_or_default(),
+            negative_keywords: p.negative_keywords.unwrap_or_default(),
+            url_exclusions: p.url_exclusions.unwrap_or_default(),
+            merchant_id: p.merchant_id,
+            feed_label: p.feed_label.as_deref(),
+            start_date: p.start_date.as_deref(),
+            end_date: p.end_date.as_deref(),
+            start_paused: p.start_paused.unwrap_or(true),
+        }) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Opt a campaign in or out of asset automation (final URL expansion, text \
+                       customization, video/image enhancements...). Returns a preview."
+    )]
+    async fn set_asset_automation(
+        &self,
+        Parameters(p): Parameters<SetAssetAutomationToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(p.customer_id.as_deref());
+        let settings: Vec<(String, bool)> =
+            p.settings.into_iter().map(|s| (s.automation_type, s.enabled)).collect();
+        match tools::advanced::set_asset_automation(&self.config, &cid, &p.campaign_id, &settings) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Add campaign exclusions: website placements, YouTube channels/videos, \
+                       content labels (brand safety), landing-page URL exclusions, topics, and \
+                       device exclusions (e.g. CONNECTED_TV). Returns a preview."
+    )]
+    async fn add_campaign_exclusions(
+        &self,
+        Parameters(p): Parameters<CampaignExclusionsToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(p.customer_id.as_deref());
+        match tools::advanced::add_campaign_exclusions(&tools::advanced::CampaignExclusionsParams {
+            config: &self.config,
+            customer_id: &cid,
+            campaign_id: &p.campaign_id,
+            placements: p.placements.unwrap_or_default(),
+            youtube_channels: p.youtube_channels.unwrap_or_default(),
+            youtube_videos: p.youtube_videos.unwrap_or_default(),
+            content_labels: p.content_labels.unwrap_or_default(),
+            url_exclusions: p.url_exclusions.unwrap_or_default(),
+            exclude_devices: p.exclude_devices.unwrap_or_default(),
+            topic_ids: p.topic_ids.unwrap_or_default(),
+        }) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Update campaign settings: name, final URL suffix (UTMs), tracking \
+                       template, start/end dates. Returns a preview."
+    )]
+    async fn update_campaign_settings(
+        &self,
+        Parameters(p): Parameters<UpdateCampaignSettingsToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(p.customer_id.as_deref());
+        match tools::advanced::update_campaign_settings(&tools::advanced::CampaignSettingsParams {
+            config: &self.config,
+            customer_id: &cid,
+            campaign_id: &p.campaign_id,
+            name: p.name.as_deref(),
+            final_url_suffix: p.final_url_suffix.as_deref(),
+            tracking_url_template: p.tracking_url_template.as_deref(),
+            start_date: p.start_date.as_deref(),
+            end_date: p.end_date.as_deref(),
+        }) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Change channels and/or optimized targeting on an existing Demand Gen ad \
+                       group. Returns a preview."
+    )]
+    async fn update_demand_gen_ad_group(
+        &self,
+        Parameters(p): Parameters<UpdateDemandGenAdGroupToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(p.customer_id.as_deref());
+        let channels = match p.channels {
+            None => None,
+            Some(list) => {
+                let mut c = tools::demand_gen::DemandGenChannels::default();
+                for ch in &list {
+                    match ch.trim().to_ascii_lowercase().as_str() {
+                        "youtube_in_stream" => c.youtube_in_stream = true,
+                        "youtube_in_feed" => c.youtube_in_feed = true,
+                        "youtube_shorts" => c.youtube_shorts = true,
+                        "discover" => c.discover = true,
+                        "gmail" => c.gmail = true,
+                        "display" => c.display = true,
+                        "maps" => c.maps = true,
+                        other => {
+                            return serde_json::json!({"error": format!("Unknown channel '{}'", other)})
+                                .to_string()
+                        }
+                    }
+                }
+                Some(c)
+            }
+        };
+        match tools::advanced::update_demand_gen_ad_group(
+            &self.config,
+            &cid,
+            &p.ad_group_id,
+            channels.as_ref(),
+            p.optimized_targeting,
+        ) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(description = "Create YouTube video assets from IDs or URLs (watch, shorts, youtu.be). Returns a preview.")]
+    async fn create_youtube_video_assets(
+        &self,
+        Parameters(p): Parameters<CreateYoutubeVideoAssetsToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(p.customer_id.as_deref());
+        match tools::advanced::create_youtube_video_assets(&self.config, &cid, &p.videos) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Download an image (PNG/JPEG/GIF, max 5 MB) from a public URL and prepare \
+                       it as an IMAGE asset. Returns a preview — call confirm_and_apply."
+    )]
+    async fn upload_image_asset_from_url(
+        &self,
+        Parameters(p): Parameters<UploadImageFromUrlToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        if !p.image_url.starts_with("https://") && !p.image_url.starts_with("http://") {
+            return serde_json::json!({"error": "image_url must be http(s)"}).to_string();
+        }
+        let cid = self.resolve_customer_id(p.customer_id.as_deref());
+        let bytes = match reqwest::get(&p.image_url).await {
+            Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                Ok(b) => b,
+                Err(e) => return serde_json::json!({"error": format!("Download failed: {}", e)}).to_string(),
+            },
+            Ok(resp) => {
+                return serde_json::json!({"error": format!("Download failed: HTTP {}", resp.status())})
+                    .to_string()
+            }
+            Err(e) => return serde_json::json!({"error": format!("Download failed: {}", e)}).to_string(),
+        };
+        match tools::advanced::image_asset_from_bytes(&self.config, &cid, &p.asset_name, &bytes, &p.image_url) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Escape hatch for anything the dedicated tools don't cover: send raw \
+                       googleAds:mutate operations (REST camelCase MutateOperation objects). \
+                       Keys are validated, budgets respect the cap, and any remove needs \
+                       confirmed_twice. Returns a preview — call confirm_and_apply."
+    )]
+    async fn mutate_raw(&self, Parameters(p): Parameters<MutateRawToolParams>) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(p.customer_id.as_deref());
+        match tools::advanced::mutate_raw(&self.config, &cid, &p.description, p.operations) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Add business name, business logo, image extensions and a call extension \
+                       to a campaign (needed for complete Search ads). Returns a preview."
+    )]
+    async fn add_campaign_brand_assets(
+        &self,
+        Parameters(p): Parameters<AddCampaignBrandAssetsToolParams>,
+    ) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let cid = self.resolve_customer_id(p.customer_id.as_deref());
+        let call = match (p.call_country_code.as_deref(), p.call_phone_number.as_deref()) {
+            (Some(c), Some(n)) => Some((c, n)),
+            (None, None) => None,
+            _ => {
+                return serde_json::json!({"error": "Give both call_country_code and call_phone_number"})
+                    .to_string()
+            }
+        };
+        match tools::advanced::add_campaign_brand_assets(&tools::advanced::CampaignBrandAssetsParams {
+            config: &self.config,
+            customer_id: &cid,
+            campaign_id: &p.campaign_id,
+            business_name: p.business_name.as_deref(),
+            business_logo_asset_ids: p.business_logo_asset_ids.unwrap_or_default(),
+            image_asset_ids: p.image_asset_ids.unwrap_or_default(),
+            call,
+        }) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Audit a Search campaign for completeness: every RSA must have 15 \
+                       headlines, 4 descriptions and a display path; the campaign must reach \
+                       sitelinks >= 4, callouts >= 4, structured snippet, image, business name \
+                       and business logo (campaign, ad group or account level). Read-only. \
+                       Run it after building any Search campaign and fix every problem it lists."
+    )]
+    async fn audit_search_completeness(
+        &self,
+        Parameters(p): Parameters<AuditSearchCompletenessToolParams>,
+    ) -> String {
+        let cid = self.resolve_customer_id(p.customer_id.as_deref());
+        if p.campaign_id.is_empty() || !p.campaign_id.chars().all(|c| c.is_ascii_digit()) {
+            return serde_json::json!({"error": "campaign_id must be numeric"}).to_string();
+        }
+        let campaign_id = p.campaign_id.clone();
+        self.run_tool(|client| async move {
+            let ads = client
+                .search(
+                    &cid,
+                    &format!(
+                        "SELECT campaign.id, ad_group_ad.ad.id, ad_group_ad.ad.responsive_search_ad.headlines, \
+                         ad_group_ad.ad.responsive_search_ad.descriptions, \
+                         ad_group_ad.ad.responsive_search_ad.path1 FROM ad_group_ad \
+                         WHERE campaign.id = {} AND ad_group_ad.status = 'ENABLED' \
+                         AND ad_group.status = 'ENABLED' \
+                         AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'",
+                        campaign_id
+                    ),
+                )
+                .await?;
+            let mut fields: Vec<String> = Vec::new();
+            let queries = [
+                (format!("SELECT campaign.id, campaign_asset.field_type FROM campaign_asset WHERE campaign.id = {} AND campaign_asset.status = 'ENABLED'", campaign_id), "campaignAsset"),
+                (format!("SELECT campaign.id, ad_group_asset.field_type FROM ad_group_asset WHERE campaign.id = {} AND ad_group_asset.status = 'ENABLED'", campaign_id), "adGroupAsset"),
+                ("SELECT customer_asset.field_type FROM customer_asset WHERE customer_asset.status = 'ENABLED'".to_string(), "customerAsset"),
+            ];
+            for (q, key) in queries {
+                for row in client.search(&cid, &q).await? {
+                    if let Some(f) = row[key]["fieldType"].as_str() {
+                        fields.push(f.to_string());
+                    }
+                }
+            }
+            let report = tools::advanced::evaluate_search_completeness(&ads, &fields);
+            Ok(serde_json::to_string_pretty(&report).unwrap_or_default())
+        })
+        .await
     }
 
     // ── Phase 5: Audiences ──────────────────────────────────────────────

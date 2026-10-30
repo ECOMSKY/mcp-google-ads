@@ -561,6 +561,40 @@ impl GoogleAdsClient {
         Ok(parsed)
     }
 
+    /// Create/update custom segments via `customAudiences:mutate`
+    /// (CustomAudienceService). Returns the raw `results` array.
+    pub async fn mutate_custom_audiences(
+        &self,
+        customer_id: &str,
+        operations: Vec<serde_json::Value>,
+    ) -> Result<Vec<serde_json::Value>> {
+        let normalized_id = Self::normalize_customer_id(customer_id);
+        let url = format!(
+            "{}/customers/{}/customAudiences:mutate",
+            self.base_url, normalized_id
+        );
+        let headers = self.build_headers().await?;
+        let body = serde_json::json!({ "operations": operations });
+        let response = self
+            .http
+            .post(&url)
+            .headers(headers)
+            .json(&body)
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_body = response.text().await.unwrap_or_default();
+            return Err(parse_google_ads_error(status, &error_body));
+        }
+        let parsed: serde_json::Value = response.json().await?;
+        Ok(parsed
+            .get("results")
+            .and_then(|r| r.as_array())
+            .cloned()
+            .unwrap_or_default())
+    }
+
     /// Dismiss recommendations via the dedicated `recommendations:dismiss` RPC.
     pub async fn dismiss_recommendations(
         &self,

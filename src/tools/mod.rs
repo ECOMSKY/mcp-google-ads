@@ -1,4 +1,5 @@
 pub mod accounts;
+pub mod advanced;
 pub mod ad_groups_write;
 pub mod ads;
 pub mod ads_write;
@@ -10,6 +11,7 @@ pub mod campaigns;
 pub mod campaigns_write;
 pub mod confirm;
 pub mod conversions;
+pub mod demand_gen;
 pub mod demographics;
 pub mod entity_lifecycle;
 pub mod extensions;

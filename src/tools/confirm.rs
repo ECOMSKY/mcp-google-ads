@@ -119,6 +119,12 @@ async fn apply_plan(
         PlanDispatch::DismissRecommendation { resource_names } => {
             dismiss_recommendation_dispatch(client, plan, resource_names).await
         }
+        PlanDispatch::CustomAudienceMutate { operations } => {
+            let response = client
+                .mutate_custom_audiences(&plan.customer_id, operations.clone())
+                .await;
+            response.map(|results| json!({ "status": "APPLIED", "results": results }))
+        }
     };
 
     match dispatch_result {

@@ -14,28 +14,46 @@ use crate::safety::preview::{store_plan, ChangePlan};
 /// Shared by drafting and updating so the two can never drift: an update that
 /// accepted a set the create path refuses would write an ad Google rejects.
 fn validate_headline_set(headlines: &[String]) -> Result<()> {
-    if headlines.len() < 3 || headlines.len() > 15 {
+    // Completeness rule: an RSA ships with the full 15 headlines, never a
+    // partial set — Google serves and learns best with every slot filled.
+    if headlines.len() != 15 {
         return Err(McpGoogleAdsError::Validation(format!(
-            "RSA requires 3-15 headlines, got {}",
+            "Incomplete RSA: exactly 15 headlines are required, got {}. \
+             Write the missing ones (different angles: benefit, feature, offer, proof, CTA, brand).",
             headlines.len()
         )));
     }
     for headline in headlines {
         validate_headline(headline)?;
     }
+    check_unique("headline", headlines)?;
     Ok(())
 }
 
 /// An RSA carries 2 to 4 descriptions, each at most 90 characters.
 fn validate_description_set(descriptions: &[String]) -> Result<()> {
-    if descriptions.len() < 2 || descriptions.len() > 4 {
+    if descriptions.len() != 4 {
         return Err(McpGoogleAdsError::Validation(format!(
-            "RSA requires 2-4 descriptions, got {}",
+            "Incomplete RSA: exactly 4 descriptions are required, got {}",
             descriptions.len()
         )));
     }
     for desc in descriptions {
         validate_description(desc)?;
+    }
+    check_unique("description", descriptions)?;
+    Ok(())
+}
+
+fn check_unique(kind: &str, items: &[String]) -> Result<()> {
+    let mut seen = std::collections::HashSet::new();
+    for item in items {
+        if !seen.insert(item.trim().to_lowercase()) {
+            return Err(McpGoogleAdsError::Validation(format!(
+                "Duplicate {}: '{}'",
+                kind, item
+            )));
+        }
     }
     Ok(())
 }
@@ -349,7 +367,7 @@ mod tests {
             customer_id: "123-456-7890",
             ad_group_id: "111",
             headlines: make_headlines(2), // too few
-            descriptions: make_descriptions(2),
+            descriptions: make_descriptions(4),
             final_url: "https://example.com",
             path1: None,
             path2: None,
@@ -357,7 +375,7 @@ mod tests {
         });
         assert!(result.is_err());
         let err = result.err().map(|e| e.to_string()).unwrap_or_default();
-        assert!(err.contains("3-15 headlines"));
+        assert!(err.contains("15 headlines"));
     }
 
     #[test]
@@ -368,7 +386,7 @@ mod tests {
             customer_id: "123-456-7890",
             ad_group_id: "111",
             headlines: make_headlines(16), // too many
-            descriptions: make_descriptions(2),
+            descriptions: make_descriptions(4),
             final_url: "https://example.com",
             path1: None,
             path2: None,
@@ -384,8 +402,8 @@ mod tests {
             config: &config,
             customer_id: "123-456-7890",
             ad_group_id: "111",
-            headlines: make_headlines(3),
-            descriptions: make_descriptions(1), // too few
+            headlines: make_headlines(15),
+            descriptions: make_descriptions(3), // too few
             final_url: "https://example.com",
             path1: None,
             path2: None,
@@ -393,20 +411,20 @@ mod tests {
         });
         assert!(result.is_err());
         let err = result.err().map(|e| e.to_string()).unwrap_or_default();
-        assert!(err.contains("2-4 descriptions"));
+        assert!(err.contains("4 descriptions"));
     }
 
     #[test]
     fn test_draft_rsa_headline_too_long() {
         let config = Config::default();
-        let mut headlines = make_headlines(3);
+        let mut headlines = make_headlines(15);
         headlines[0] = "A".repeat(31); // exceeds 30 char limit
         let result = draft_responsive_search_ad(&DraftRsaParams {
             config: &config,
             customer_id: "123-456-7890",
             ad_group_id: "111",
             headlines,
-            descriptions: make_descriptions(2),
+            descriptions: make_descriptions(4),
             final_url: "https://example.com",
             path1: None,
             path2: None,
@@ -424,8 +442,8 @@ mod tests {
             config: &config,
             customer_id: "123-456-7890",
             ad_group_id: "111",
-            headlines: make_headlines(3),
-            descriptions: make_descriptions(2),
+            headlines: make_headlines(15),
+            descriptions: make_descriptions(4),
             final_url: "https://example.com",
             path1: Some("path1"),
             path2: Some("path2"),
@@ -444,8 +462,8 @@ mod tests {
             config: &config,
             customer_id: "123-456-7890",
             ad_group_id: "111",
-            headlines: make_headlines(3),
-            descriptions: make_descriptions(2),
+            headlines: make_headlines(15),
+            descriptions: make_descriptions(4),
             final_url: "https://example.com",
             path1: None,
             path2: None,
@@ -464,8 +482,8 @@ mod tests {
             config: &config,
             customer_id: "123-456-7890",
             ad_group_id: "111",
-            headlines: make_headlines(3),
-            descriptions: make_descriptions(2),
+            headlines: make_headlines(15),
+            descriptions: make_descriptions(4),
             final_url: "https://example.com",
             path1: None,
             path2: None,
@@ -484,8 +502,8 @@ mod tests {
             config: &config,
             customer_id: "123-456-7890",
             ad_group_id: "111",
-            headlines: make_headlines(3),
-            descriptions: make_descriptions(2),
+            headlines: make_headlines(15),
+            descriptions: make_descriptions(4),
             final_url: "https://example.com",
             path1: None,
             path2: None,
@@ -503,7 +521,7 @@ mod tests {
             config: &config,
             customer_id: "123-456-7890",
             ad_group_id: "111",
-            headlines: make_headlines(3),
+            headlines: make_headlines(15),
             descriptions: make_descriptions(5), // exceeds max of 4
             final_url: "https://example.com",
             path1: None,
@@ -512,7 +530,7 @@ mod tests {
         });
         assert!(result.is_err());
         let err = result.err().map(|e| e.to_string()).unwrap_or_default();
-        assert!(err.contains("2-4 descriptions"));
+        assert!(err.contains("4 descriptions"));
     }
 
     #[test]
@@ -524,8 +542,8 @@ mod tests {
             config: &config,
             customer_id: "123-456-7890",
             ad_group_id: "111",
-            headlines: make_headlines(3),
-            descriptions: make_descriptions(2),
+            headlines: make_headlines(15),
+            descriptions: make_descriptions(4),
             final_url: "",
             path1: None,
             path2: None,

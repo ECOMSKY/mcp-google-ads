@@ -86,7 +86,7 @@ fn set(paths: &[&str]) -> BTreeSet<String> {
 fn updating_only_headlines_masks_only_headlines() {
     let config = Config::default();
     let preview = update_responsive_search_ad(&UpdateRsaParams {
-        headlines: Some(headlines(3)),
+        headlines: Some(headlines(15)),
         ..params(&config, "9876543210")
     })
     .expect("plan builds");
@@ -122,7 +122,7 @@ fn updating_only_headlines_masks_only_headlines() {
 fn updating_only_descriptions_masks_only_descriptions() {
     let config = Config::default();
     let preview = update_responsive_search_ad(&UpdateRsaParams {
-        descriptions: Some(descriptions(2)),
+        descriptions: Some(descriptions(4)),
         ..params(&config, "555")
     })
     .expect("plan builds");
@@ -165,8 +165,8 @@ fn updating_only_the_final_url_masks_only_final_urls() {
 fn updating_every_field_masks_every_field() {
     let config = Config::default();
     let preview = update_responsive_search_ad(&UpdateRsaParams {
-        headlines: Some(headlines(4)),
-        descriptions: Some(descriptions(3)),
+        headlines: Some(headlines(15)),
+        descriptions: Some(descriptions(4)),
         final_url: Some("https://www.hook0.com/webhook-api"),
         path1: Some("webhook"),
         path2: Some("api"),
@@ -219,7 +219,7 @@ fn a_path_can_be_updated_without_touching_the_creative() {
 fn the_update_never_removes_or_re_creates_the_ad() {
     let config = Config::default();
     let preview = update_responsive_search_ad(&UpdateRsaParams {
-        headlines: Some(headlines(3)),
+        headlines: Some(headlines(15)),
         ..params(&config, "555")
     })
     .expect("plan builds");
@@ -255,30 +255,22 @@ fn headline_count_bounds_hold_in_both_directions() {
 
     assert!(
         update_responsive_search_ad(&UpdateRsaParams {
-            headlines: Some(headlines(3)),
-            ..params(&config, "555")
-        })
-        .is_ok(),
-        "3 headlines is the documented minimum and must be accepted"
-    );
-    assert!(
-        update_responsive_search_ad(&UpdateRsaParams {
             headlines: Some(headlines(15)),
             ..params(&config, "555")
         })
         .is_ok(),
-        "15 headlines is the documented maximum and must be accepted"
+        "a complete set of 15 headlines must be accepted"
     );
 
-    for count in [2usize, 16] {
+    for count in [3usize, 14, 16] {
         let msg = update_responsive_search_ad(&UpdateRsaParams {
             headlines: Some(headlines(count)),
             ..params(&config, "555")
         })
-        .expect_err("out-of-range headline count is refused")
+        .expect_err("an incomplete or oversized headline set is refused")
         .to_string();
         assert!(
-            msg.contains("headlines") && msg.contains("3-15"),
+            msg.contains("15 headlines"),
             "the error must name the field and the bound, got: {msg}"
         );
     }
@@ -288,7 +280,7 @@ fn headline_count_bounds_hold_in_both_directions() {
 fn headline_length_bound_holds_in_both_directions() {
     let config = Config::default();
 
-    let mut at_limit = headlines(3);
+    let mut at_limit = headlines(15);
     at_limit[0] = "a".repeat(30);
     assert!(
         update_responsive_search_ad(&UpdateRsaParams {
@@ -299,7 +291,7 @@ fn headline_length_bound_holds_in_both_directions() {
         "a 30-character headline is exactly at the limit and must be accepted"
     );
 
-    let mut over_limit = headlines(3);
+    let mut over_limit = headlines(15);
     over_limit[0] = "a".repeat(31);
     let msg = update_responsive_search_ad(&UpdateRsaParams {
         headlines: Some(over_limit),
@@ -317,26 +309,24 @@ fn headline_length_bound_holds_in_both_directions() {
 fn description_count_bounds_hold_in_both_directions() {
     let config = Config::default();
 
-    for count in [2usize, 4] {
-        assert!(
-            update_responsive_search_ad(&UpdateRsaParams {
-                descriptions: Some(descriptions(count)),
-                ..params(&config, "555")
-            })
-            .is_ok(),
-            "{count} descriptions is within the documented range"
-        );
-    }
+    assert!(
+        update_responsive_search_ad(&UpdateRsaParams {
+            descriptions: Some(descriptions(4)),
+            ..params(&config, "555")
+        })
+        .is_ok(),
+        "a complete set of 4 descriptions must be accepted"
+    );
 
-    for count in [1usize, 5] {
+    for count in [2usize, 3, 5] {
         let msg = update_responsive_search_ad(&UpdateRsaParams {
             descriptions: Some(descriptions(count)),
             ..params(&config, "555")
         })
-        .expect_err("out-of-range description count is refused")
+        .expect_err("an incomplete or oversized description set is refused")
         .to_string();
         assert!(
-            msg.contains("descriptions") && msg.contains("2-4"),
+            msg.contains("4 descriptions"),
             "the error must name the field and the bound, got: {msg}"
         );
     }
@@ -346,7 +336,7 @@ fn description_count_bounds_hold_in_both_directions() {
 fn description_length_bound_holds_in_both_directions() {
     let config = Config::default();
 
-    let mut at_limit = descriptions(2);
+    let mut at_limit = descriptions(4);
     at_limit[0] = "a".repeat(90);
     assert!(
         update_responsive_search_ad(&UpdateRsaParams {
@@ -357,7 +347,7 @@ fn description_length_bound_holds_in_both_directions() {
         "a 90-character description is exactly at the limit and must be accepted"
     );
 
-    let mut over_limit = descriptions(2);
+    let mut over_limit = descriptions(4);
     over_limit[0] = "a".repeat(91);
     let msg = update_responsive_search_ad(&UpdateRsaParams {
         descriptions: Some(over_limit),
@@ -454,7 +444,7 @@ fn display_path_bounds_hold_in_both_directions() {
 #[test]
 fn an_out_of_bounds_value_is_never_truncated_to_fit() {
     let config = Config::default();
-    let mut too_long = headlines(3);
+    let mut too_long = headlines(15);
     too_long[0] = "a".repeat(31);
 
     // The refusal must be total: no plan is stored, so nothing can be applied
@@ -472,7 +462,7 @@ fn the_ad_id_must_be_a_bare_numeric_id() {
 
     assert!(
         update_responsive_search_ad(&UpdateRsaParams {
-            headlines: Some(headlines(3)),
+            headlines: Some(headlines(15)),
             ..params(&config, "1234567890123456789")
         })
         .is_ok(),
@@ -487,7 +477,7 @@ fn the_ad_id_must_be_a_bare_numeric_id() {
         "12345678901234567890",
     ] {
         let msg = update_responsive_search_ad(&UpdateRsaParams {
-            headlines: Some(headlines(3)),
+            headlines: Some(headlines(15)),
             ..params(&config, bad)
         })
         .expect_err("a non-numeric ad ID is refused")
@@ -509,7 +499,7 @@ fn a_blocked_operation_is_refused() {
         ..Config::default()
     };
     let msg = update_responsive_search_ad(&UpdateRsaParams {
-        headlines: Some(headlines(3)),
+        headlines: Some(headlines(15)),
         ..params(&config, "555")
     })
     .expect_err("the operation is blocked by configuration")
@@ -539,7 +529,7 @@ async fn a_partial_update_reaches_the_wire_with_only_the_supplied_fields() {
         config: &config,
         customer_id: "1234567890",
         ad_id: "555",
-        headlines: Some(headlines(3)),
+        headlines: Some(headlines(15)),
         descriptions: None,
         final_url: Some("https://www.hook0.com/webhook-api"),
         path1: None,
@@ -656,8 +646,8 @@ proptest! {
             config: &config,
             customer_id: "1234567890",
             ad_id: &ad_id,
-            headlines: if with_headlines { Some(headlines(3)) } else { None },
-            descriptions: if with_descriptions { Some(descriptions(2)) } else { None },
+            headlines: if with_headlines { Some(headlines(15)) } else { None },
+            descriptions: if with_descriptions { Some(descriptions(4)) } else { None },
             final_url: if with_final_url { Some("https://www.hook0.com/webhook-api") } else { None },
             path1: if with_path1 { Some("webhook") } else { None },
             path2: if with_path2 { Some("api") } else { None },

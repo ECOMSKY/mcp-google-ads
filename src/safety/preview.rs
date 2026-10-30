@@ -34,6 +34,12 @@ pub enum PlanDispatch {
         /// Full resource name(s): `customers/{cid}/recommendations/{rec_id}`.
         resource_names: Vec<String>,
     },
+    /// `POST /customers/{cid}/customAudiences:mutate` — custom segments are
+    /// not part of the `googleAds:mutate` oneof.
+    CustomAudienceMutate {
+        /// `CustomAudienceOperation` payloads (`{"create": {...}}`).
+        operations: Vec<serde_json::Value>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
