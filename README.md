@@ -90,6 +90,7 @@ An MCP server that gives Claude full read + write access to Google Ads accounts 
 ## Features
 
 - **63 tools** - Campaign management, RSA ads, keywords, extensions, PMax, audiences, bidding, scheduling, keyword planner, conversions, geo targeting, policy
+- **Merchant Center** - 6 `gmc_*` tools on the Merchant API v1: product statuses and issues, promotions, custom labels
 - **Two-step safety** - All mutations return a preview; nothing executes until you confirm
 - **Budget guardrails** - Configurable daily budget cap, bid increase limits, broad+manual CPC blocker
 - **Audit logging** - Every mutation logged to a local JSON file with timestamp and dry-run status
@@ -229,6 +230,25 @@ All write tools return a preview. Call `confirm_and_apply` with `dry_run=false` 
 | `remove_entity` | Permanently remove entity (destructive) |
 | `confirm_and_apply` | Execute a previewed change (dry_run=true default) |
 
+### Merchant Center (6 tools, Merchant API v1)
+
+Every tool takes `merchant_id` (the numeric Merchant Center account id), like `customer_id` for Google Ads. Calls go to `merchantapi.googleapis.com` with the same OAuth credentials, using the `https://www.googleapis.com/auth/content` scope.
+
+**One-time setup**
+1. Re-run `./scripts/generate_token.sh ~/.mcp-google-ads/credentials.json`. It now requests both the `adwords` and `content` scopes. A token generated before this version cannot call the Merchant API.
+2. Register the GCP project behind your OAuth client, once per Merchant Center account: `gmc_register_gcp(merchant_id, developer_email)` then `confirm_and_apply`.
+
+| Tool | Type | Description |
+|------|------|-------------|
+| `gmc_register_gcp` | write | Register this GCP project with a Merchant Center account (`developerRegistration:registerGcp`) |
+| `gmc_list_products` | read | Products with aggregated status (`approved` / `disapproved` / `limited` / `pending`), destination statuses and item issues. Filters: `status`, `availability`, `limit` |
+| `gmc_product_issues` | read | Disapproved or limited products with the reason for each issue (code, description, attribute, countries, fix), plus a count per issue code |
+| `gmc_list_promotions` | read | Promotions with their review status per destination |
+| `gmc_create_promotion` | write | `percent_off` **or** `amount_off`, optional `promo_code`, `minimum_order_amount`, `start_date` / `end_date` (YYYY-MM-DD = 00:00:00 / 23:59:59 UTC, or RFC 3339), `target_country`, `content_language`, `offer_ids` (omit for all products). If no promotion data source exists for the country and language, the plan creates one |
+| `gmc_set_custom_label` | write | Set `custom_label_0`…`custom_label_4` on one product through a supplemental API data source named "MCP google-ads-write — custom labels". If missing, the plan creates it and links it into the product's primary data source default rule, placed first so it wins. Other entries in the rule are kept. Empty `value` clears the label |
+
+Merchant writes follow the same rules as Google Ads writes: preview, then `confirm_and_apply` (dry-run by default), `GOOGLE_ADS_READ_ONLY`, `GOOGLE_ADS_BLOCKED_OPS`, and a line in `~/.mcp-google-ads/audit.log` for each applied plan (the `customer_id` field holds the merchant id). Each request in a plan is checked against a whitelist of routes before it is sent. The whitelist contains no delete route. Data source updates are limited to `primaryProductDataSource.defaultRule`, and product input patches to custom labels. **No product and no data source is ever deleted.**
+
 ---
 
 ## Safety Guardrails
@@ -248,6 +268,7 @@ All write tools return a preview. Call `confirm_and_apply` with `dry_run=false` 
 | **Blocked operations** | Configure `GOOGLE_ADS_BLOCKED_OPS` to disable specific tools |
 | **Read-only mode** | Set `GOOGLE_ADS_READ_ONLY=true` to disable all writes |
 | **Audit logging** | Every mutation logged with timestamp, operation, changes, dry_run status |
+| **Merchant route whitelist** | Merchant Center writes go only to an explicit list of Merchant API routes. Deletes are not on it, and data source / product input updates are restricted to the default rule and custom labels |
 
 ---
 

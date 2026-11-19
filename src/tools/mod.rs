@@ -18,6 +18,7 @@ pub mod geo;
 pub mod keyword_planner;
 pub mod keywords;
 pub mod keywords_write;
+pub mod merchant;
 pub mod pmax;
 pub mod policy;
 pub mod recommendations;

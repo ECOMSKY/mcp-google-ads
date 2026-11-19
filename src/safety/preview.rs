@@ -34,6 +34,11 @@ pub enum PlanDispatch {
         /// Full resource name(s): `customers/{cid}/recommendations/{rec_id}`.
         resource_names: Vec<String>,
     },
+    /// Merchant API v1 requests (`merchantapi.googleapis.com`), run in order.
+    /// The plan's `customer_id` holds the Merchant Center account id.
+    MerchantRequests {
+        steps: Vec<crate::merchant::MerchantStep>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

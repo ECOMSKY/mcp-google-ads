@@ -77,7 +77,8 @@ fi
 
 PORT=8085
 REDIRECT_URI="http://localhost:${PORT}"
-SCOPE="https://www.googleapis.com/auth/adwords"
+# Google Ads + Merchant Center (Merchant API). Space-separated, URL-encoded.
+SCOPE="https://www.googleapis.com/auth/adwords%20https://www.googleapis.com/auth/content"
 
 AUTH_URL="https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPE}&response_type=code&access_type=offline&prompt=consent"
 

@@ -3,6 +3,7 @@ pub mod client;
 pub mod config;
 pub mod error;
 pub mod gaql;
+pub mod merchant;
 pub mod models;
 pub mod safety;
 pub mod tools;
@@ -450,6 +451,102 @@ pub struct EntityActionParams {
     pub entity_type: String,
     /// The entity ID.
     pub entity_id: String,
+}
+
+// ── Merchant Center (Merchant API v1) parameter structs ────────────────
+
+/// Parameters for gmc_register_gcp.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GmcRegisterGcpParams {
+    /// Merchant Center account id (numeric).
+    pub merchant_id: String,
+    /// Email of the developer contact for this GCP project (receives Merchant API notices).
+    pub developer_email: String,
+}
+
+/// Parameters for gmc_list_products.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GmcListProductsParams {
+    /// Merchant Center account id (numeric).
+    pub merchant_id: String,
+    /// Filter by aggregated status: approved, disapproved, limited, pending, or any (default).
+    pub status: Option<String>,
+    /// Filter by availability, e.g. in_stock, out_of_stock, preorder, backorder.
+    pub availability: Option<String>,
+    /// Max products returned (1-1000, default 100). Counts cover the whole catalog.
+    pub limit: Option<u32>,
+}
+
+/// Parameters for gmc_product_issues.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GmcProductIssuesParams {
+    /// Merchant Center account id (numeric).
+    pub merchant_id: String,
+    /// Max products listed (1-1000, default 200). The per-issue summary covers all.
+    pub limit: Option<u32>,
+}
+
+/// Parameters for gmc_list_promotions.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GmcMerchantIdParams {
+    /// Merchant Center account id (numeric).
+    pub merchant_id: String,
+}
+
+/// Parameters for gmc_create_promotion.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GmcCreatePromotionParams {
+    /// Merchant Center account id (numeric).
+    pub merchant_id: String,
+    /// Your unique promotion id (letters, digits, '_' or '-', max 50).
+    pub promotion_id: String,
+    /// Promotion title shown to shoppers (max 60 characters).
+    pub title: String,
+    /// Percentage off (1-99). Give this OR amount_off.
+    pub percent_off: Option<u32>,
+    /// Fixed amount off, in currency units (e.g. 10.0). Give this OR percent_off.
+    pub amount_off: Option<f64>,
+    /// ISO 4217 currency (e.g. EUR). Required with amount_off or minimum_order_amount.
+    pub currency: Option<String>,
+    /// Promo code to type at checkout. Omit for an automatic (no-code) promotion.
+    pub promo_code: Option<String>,
+    /// Minimum order amount, in currency units.
+    pub minimum_order_amount: Option<f64>,
+    /// Start: YYYY-MM-DD (00:00:00 UTC) or RFC 3339.
+    pub start_date: String,
+    /// End: YYYY-MM-DD (23:59:59 UTC) or RFC 3339. Max 183 days after start.
+    pub end_date: String,
+    /// Target country, ISO 3166-1 alpha-2 (e.g. FR).
+    pub target_country: String,
+    /// Content language, ISO 639-1 (e.g. fr).
+    pub content_language: String,
+    /// Offer ids the promotion applies to. Omit for all products.
+    pub offer_ids: Option<Vec<String>>,
+    /// Destinations (default SHOPPING_ADS + FREE_LISTINGS).
+    pub destinations: Option<Vec<String>>,
+}
+
+/// Parameters for gmc_set_custom_label.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GmcSetCustomLabelParams {
+    /// Merchant Center account id (numeric).
+    pub merchant_id: String,
+    /// Product offer id (the id from your feed).
+    pub offer_id: String,
+    /// Which custom label: 0-4 (custom_label_0 … custom_label_4).
+    pub label_index: u8,
+    /// Label value (max 100 chars). Empty string clears it in the supplemental source.
+    pub value: String,
+    /// Content language, only needed when the offer id exists in several languages.
+    pub content_language: Option<String>,
+    /// Feed label, only needed when the offer id exists under several feed labels.
+    pub feed_label: Option<String>,
 }
 
 /// Parameters for confirming and applying a change plan.
@@ -2361,6 +2458,107 @@ impl GoogleAdsMcp {
         ) {
             Ok(preview) => preview.to_string(),
             Err(e) => e.to_json().to_string(),
+        }
+    }
+
+    // ── Merchant Center (Merchant API v1) ───────────────────────────────
+
+    #[tool(
+        description = "Merchant Center: register this server's GCP project with a Merchant Center account (required once per account before any other gmc_* call). Returns a preview — call confirm_and_apply to execute."
+    )]
+    async fn gmc_register_gcp(&self, Parameters(params): Parameters<GmcRegisterGcpParams>) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        match tools::merchant::draft_register_gcp(&self.config, &params.merchant_id, &params.developer_email) {
+            Ok(preview) => preview.to_string(),
+            Err(e) => error_response(&e).to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Merchant Center: list products with their aggregated status (approved/disapproved/limited/pending), destination statuses and item issues. Optional filters: status, availability."
+    )]
+    async fn gmc_list_products(&self, Parameters(params): Parameters<GmcListProductsParams>) -> String {
+        match tools::merchant::list_products(
+            &self.config,
+            &params.merchant_id,
+            params.status.as_deref(),
+            params.availability.as_deref(),
+            params.limit,
+        )
+        .await
+        {
+            Ok(v) => v.to_string(),
+            Err(e) => error_response(&e).to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Merchant Center: disapproved or limited products with the reason for each (issue code, description, attribute, countries, fix), plus a summary per issue code."
+    )]
+    async fn gmc_product_issues(&self, Parameters(params): Parameters<GmcProductIssuesParams>) -> String {
+        match tools::merchant::product_issues(&self.config, &params.merchant_id, params.limit).await {
+            Ok(v) => v.to_string(),
+            Err(e) => error_response(&e).to_string(),
+        }
+    }
+
+    #[tool(description = "Merchant Center: list promotions with their review status per destination.")]
+    async fn gmc_list_promotions(&self, Parameters(params): Parameters<GmcMerchantIdParams>) -> String {
+        match tools::merchant::list_promotions(&self.config, &params.merchant_id).await {
+            Ok(v) => v.to_string(),
+            Err(e) => error_response(&e).to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Merchant Center: draft a promotion (percent or amount off, optional promo code, minimum order, dates, country, language, all or specific products). Auto-creates a promotion data source for the country/language if missing. Returns a preview — call confirm_and_apply to execute."
+    )]
+    async fn gmc_create_promotion(&self, Parameters(params): Parameters<GmcCreatePromotionParams>) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let input = tools::merchant::PromotionInput {
+            merchant_id: params.merchant_id,
+            promotion_id: params.promotion_id,
+            title: params.title,
+            percent_off: params.percent_off,
+            amount_off: params.amount_off,
+            currency: params.currency,
+            promo_code: params.promo_code,
+            minimum_order_amount: params.minimum_order_amount,
+            start: params.start_date,
+            end: params.end_date,
+            target_country: params.target_country,
+            content_language: params.content_language,
+            offer_ids: params.offer_ids,
+            destinations: params.destinations,
+        };
+        match tools::merchant::draft_create_promotion(&self.config, &input).await {
+            Ok(preview) => preview.to_string(),
+            Err(e) => error_response(&e).to_string(),
+        }
+    }
+
+    #[tool(
+        description = "Merchant Center: set custom_label_0..4 on one product through a supplemental API data source (created and linked to the product's primary source if missing; never deletes products or data sources). Returns a preview — call confirm_and_apply to execute."
+    )]
+    async fn gmc_set_custom_label(&self, Parameters(params): Parameters<GmcSetCustomLabelParams>) -> String {
+        if let Some(err) = self.check_write_allowed() {
+            return err;
+        }
+        let input = tools::merchant::CustomLabelInput {
+            merchant_id: params.merchant_id,
+            offer_id: params.offer_id,
+            label_index: params.label_index,
+            value: params.value,
+            content_language: params.content_language,
+            feed_label: params.feed_label,
+        };
+        match tools::merchant::draft_set_custom_label(&self.config, &input).await {
+            Ok(preview) => preview.to_string(),
+            Err(e) => error_response(&e).to_string(),
         }
     }
 

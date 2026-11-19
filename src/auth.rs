@@ -1,7 +1,10 @@
 use crate::config::Config;
 use crate::error::{McpGoogleAdsError, Result};
 
-const GOOGLE_ADS_SCOPE: &str = "https://www.googleapis.com/auth/adwords";
+pub const GOOGLE_ADS_SCOPE: &str = "https://www.googleapis.com/auth/adwords";
+/// Merchant API (Merchant Center) scope. The refresh token must have been
+/// granted this scope too — `scripts/generate_token.sh` requests both.
+pub const MERCHANT_SCOPE: &str = "https://www.googleapis.com/auth/content";
 
 /// Determine auth mode from credentials file content.
 /// Service account JSON files contain a "type": "service_account" field.
@@ -38,6 +41,11 @@ fn detect_auth_mode(credentials: &serde_json::Value) -> Result<AuthMode> {
 /// - Service account: uses a service account JSON key file
 /// - Authorized user: uses client_id/client_secret from credentials.json and refresh_token from token.json
 pub async fn get_access_token(config: &Config) -> Result<String> {
+    get_access_token_for_scopes(config, &[GOOGLE_ADS_SCOPE]).await
+}
+
+/// Same as [`get_access_token`], for an explicit scope set (e.g. [`MERCHANT_SCOPE`]).
+pub async fn get_access_token_for_scopes(config: &Config, scopes: &[&str]) -> Result<String> {
     let credentials_path = &config.google.credentials_path;
 
     if !credentials_path.exists() {
@@ -56,12 +64,17 @@ pub async fn get_access_token(config: &Config) -> Result<String> {
     let mode = detect_auth_mode(&credentials_json)?;
 
     match mode {
-        AuthMode::ServiceAccount => get_service_account_token(credentials_path).await,
-        AuthMode::AuthorizedUser => get_authorized_user_token(config, &credentials_json).await,
+        AuthMode::ServiceAccount => get_service_account_token(credentials_path, scopes).await,
+        AuthMode::AuthorizedUser => {
+            get_authorized_user_token(config, &credentials_json, scopes).await
+        }
     }
 }
 
-async fn get_service_account_token(credentials_path: &std::path::Path) -> Result<String> {
+async fn get_service_account_token(
+    credentials_path: &std::path::Path,
+    scopes: &[&str],
+) -> Result<String> {
     let key = yup_oauth2::read_service_account_key(credentials_path)
         .await
         .map_err(|e| {
@@ -78,7 +91,7 @@ async fn get_service_account_token(credentials_path: &std::path::Path) -> Result
             ))
         })?;
 
-    let token = auth.token(&[GOOGLE_ADS_SCOPE]).await.map_err(|e| {
+    let token = auth.token(scopes).await.map_err(|e| {
         McpGoogleAdsError::Auth(format!("Failed to get service account token: {}", e))
     })?;
 
@@ -91,6 +104,7 @@ async fn get_service_account_token(credentials_path: &std::path::Path) -> Result
 async fn get_authorized_user_token(
     config: &Config,
     credentials_json: &serde_json::Value,
+    scopes: &[&str],
 ) -> Result<String> {
     // Extract client_id and client_secret from credentials.json
     // Format: {"installed": {"client_id": "...", "client_secret": "..."}} or
@@ -204,7 +218,7 @@ async fn get_authorized_user_token(
         })?;
 
     let token = auth
-        .token(&[GOOGLE_ADS_SCOPE])
+        .token(scopes)
         .await
         .map_err(|e| McpGoogleAdsError::Auth(format!("Failed to get OAuth2 token: {}", e)))?;
 

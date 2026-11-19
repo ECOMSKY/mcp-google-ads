@@ -119,6 +119,12 @@ async fn apply_plan(
         PlanDispatch::DismissRecommendation { resource_names } => {
             dismiss_recommendation_dispatch(client, plan, resource_names).await
         }
+        PlanDispatch::MerchantRequests { steps } => {
+            match crate::merchant::MerchantClient::new(config) {
+                Ok(merchant) => crate::merchant::execute_steps(&merchant, steps).await,
+                Err(e) => Err(e),
+            }
+        }
     };
 
     match dispatch_result {
