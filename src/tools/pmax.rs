@@ -4,7 +4,8 @@ use crate::config::Config;
 use crate::error::{McpGoogleAdsError, Result};
 use crate::models::{AdStatus, NextActionHint};
 use crate::safety::guards::{
-    check_blocked_operation, check_budget_cap, validate_description, validate_headline,
+    check_blocked_operation, check_budget_cap, validate_description, validate_final_url,
+    validate_headline,
 };
 use crate::safety::preview::{store_plan, ChangePlan};
 
@@ -99,6 +100,9 @@ pub fn create_pmax_campaign(params: &CreatePmaxCampaignParams) -> Result<serde_j
         return Err(McpGoogleAdsError::Validation(
             "At least one final URL is required".to_string(),
         ));
+    }
+    for url in &params.final_urls {
+        validate_final_url(url)?;
     }
 
     let cid = crate::client::GoogleAdsClient::normalize_customer_id(params.customer_id);
@@ -406,6 +410,9 @@ pub fn create_asset_group(params: &CreateAssetGroupParams) -> Result<serde_json:
         return Err(McpGoogleAdsError::Validation(
             "At least one final URL is required".to_string(),
         ));
+    }
+    for url in &params.final_urls {
+        validate_final_url(url)?;
     }
     // Counts include existing assets linked with the same field type: Google requires
     // HEADLINE and DESCRIPTION assets to exist BEFORE the asset-group mutate (create
@@ -768,6 +775,19 @@ mod tests {
     }
 
     #[test]
+    fn test_create_pmax_rejects_invalid_final_url() {
+        let config = Config::default();
+        let mut params = default_params(&config);
+        params.final_urls = vec![
+            "https://example.com".to_string(),
+            "javascript:alert(1)".to_string(),
+        ];
+        assert!(create_pmax_campaign(&params).is_err());
+        params.final_urls = vec!["   ".to_string()];
+        assert!(create_pmax_campaign(&params).is_err());
+    }
+
+    #[test]
     fn test_create_pmax_blocked() {
         let mut config = Config::default();
         config.safety.blocked_operations = vec!["create_pmax_campaign".to_string()];
@@ -885,6 +905,14 @@ mod tests {
         let config = Config::default();
         let mut p = ag_params(&config);
         p.existing_assets[0].field_type = "NOPE".into();
+        assert!(create_asset_group(&p).is_err());
+    }
+
+    #[test]
+    fn test_create_asset_group_rejects_invalid_final_url() {
+        let config = Config::default();
+        let mut p = ag_params(&config);
+        p.final_urls = vec!["ftp://example.com".to_string()];
         assert!(create_asset_group(&p).is_err());
     }
 
